@@ -1,121 +1,136 @@
-**Question**: How does GlideQuery work?
+**Question**: How does GlideQuery work? 
 
-**Answer**: `GlideQuery` is a class in ServiceNow that provides a more modern and flexible way to perform database operations compared to the traditional `GlideRecord` and `GlideAggregate` APIs. It allows developers to build and execute database queries in a more intuitive and succinct manner, while also providing more advanced and powerful query features.
+**Answer**: GlideQuery is a JavaScript API provided by ServiceNow. It is used for querying database tables in a more modern and intuitive way compared to the traditional GlideRecord and GlideAggregate APIs. 
 
-Here's a simple breakdown of how it works:
+At a basic level, you can think of GlideQuery as an object-oriented way to build and execute database queries. You start by creating an instance of GlideQuery for a specific table, and then you chain together various methods to build up your query. Once your query is built, you execute it to retrieve the results.
 
-1. **Initialization**: You create a new `GlideQuery` object by passing the table name to its constructor:
+Here's a simple example:
 
-    ```javascript
-    var query = new GlideQuery('sys_user');
-    ```
+```javascript
+var users = new GlideQuery('sys_user')
+  .where('active', true)
+  .select();
+```
 
-2. **Building the query**: You can then chain methods onto the `GlideQuery` object to build your query. Each method corresponds to a specific database operation or condition. For example, you can add filter conditions using the `where()` method:
+In this example, we're creating a new GlideQuery for the `sys_user` table, adding a WHERE clause to only include active users, and then executing the query with `select()`. The result is an array of objects, each representing a user record.
 
-    ```javascript
-    query.where('active', true);
-    ```
+Under the hood, GlideQuery is creating a SQL-like query based on the methods you chain together. It uses the `table` property to know which table to query. It uses the `plan` property, which is an array of "step" objects, to keep track of the query operations (like SELECT, WHERE, ORDER BY, etc.). Each step object describes a part of the query.
 
-    You can also limit the number of records returned using the `limit()` method:
+When you execute the query, it uses the `GlideQueryEvaluator` to turn the plan into an actual query that can be executed against the database. It also checks the schema of the table to make sure the fields you're querying actually exist.
 
-    ```javascript
-    query.limit(10);
-    ```
+Note: As of now, GlideQuery is only available in scoped applications and starting from the 'Orlando' release. 
 
-3. **Executing the query**: You can execute the query and retrieve the results using the `toArray()` or `toGlideRecord()` methods:
+**Question**: How is GlideQuery implemented that it allows for you to chain methods on top of each other? 
 
-    ```javascript
-    var results = query.toArray();
-    ```
+**Answer**: GlideQuery, a ServiceNow class, allows for method chaining in its implementation. Method chaining is a common programming technique in which multiple methods are called sequentially on an object, with each method returning an object that can support further methods. This allows for the creation of a 'chain' of method calls. 
 
-    ```javascript
-    var glideRecord = query.toGlideRecord();
-    glideRecord.query();
-    while (glideRecord.next()) {
-    	// Do something with the glideRecord
-    }
-    ```
+In GlideQuery, each method like `.select()`, `.orderBy()`, `.where()`, etc., returns a new instance of the GlideQuery object. This allows the methods to be chained together. 
 
-Under the hood, the `GlideQuery` class maintains an internal representation of the query, which is updated each time you call a method to modify the query. This internal representation is used to generate the actual SQL query that is executed against the database when you call `toArray()` or `toGlideRecord()`.
+For instance, you can have something like this:
 
-In addition to the standard query operations provided by `GlideRecord`, `GlideQuery` also supports more advanced features like subqueries, complex join operations, and aggregation functions.
+```javascript
+var users = new GlideQuery('sys_user')
+    .select('first_name')
+    .where('last_name', '=', 'Smith')
+    .orderBy('first_name')
+    .toArray();
+```
 
-**Question**: How is GlideQuery implemented that it allows for you to chain methods on top of each other?
+This is an example of method chaining in the GlideQuery object. Here, `.select('first_name')` returns a GlideQuery object that has the select method applied, `.where('last_name', '=', 'Smith')` returns a new GlideQuery object that has the where method applied, and so on. This allows for the methods to be chained together. 
 
-**Answer**: GlideQuery is designed to allow method chaining by returning a new GlideQuery object after each method call. This is made possible because each method call adds a new object to the 'plan' array representing the action to be taken, then returns a new GlideQuery with the updated 'plan'.
-
-Let's take a look at the 'withAcls()' method as an example:
+The key to this chaining is that each of these methods returns a new GlideQuery object with the current state. This is evident from the code snippet:
 
 ```javascript
 GlideQuery.prototype.withAcls = function withAcls() {
 	return new GlideQuery(
 		this.table,
 		this.plan.concat({
-			type: 'withAcls'
+			type: 'withAcls',
 		})
 	);
 };
 ```
 
-In the code above, a new GlideQuery object is created and returned. The new GlideQuery has the same 'table' as the current GlideQuery, and a 'plan' array that includes all current plan steps plus a new step of the type 'withAcls'. This returned object can then be used for further method chaining.
+In the `withAcls()` method, after applying the operation, a new GlideQuery object is returned with the current state. This allows for subsequent method calls to be made on the same line. 
 
-So if you have a GlideQuery, you can chain methods like this:
+This technique of method chaining makes the code cleaner and more readable. 
 
-```javascript
-var users = new GlideQuery('sys_user')
-	.withAcls()
-	.limit(20)
-	.orderByDesc('first_name')
-	.select('first_name')
-	.toArray(100);
-```
+**Question**: What about the toArray() method, I don't understand why we need that. What does it do? 
 
-Each method call in the chain adds a new step to the 'plan' and returns a new GlideQuery object, allowing for the next method in the chain to be called.
+**Answer**: The `toArray()` method in GlideQuery is a terminal function that executes the query and returns the results as an array of simple JavaScript objects. Each object in the array represents a record from the database and the properties of the object are the fields of the record. 
 
-**Question**: What about the toArray() method, I don't understand why we need that. What does it do?
+This method is useful when you need to work with the result set in a format that's easy to manipulate with standard JavaScript. It allows you to iterate over the result set using array methods like `forEach()`, `map()`, `filter()`, etc.
 
-**Answer**: The `toArray()` method in GlideQuery is used to fetch the records from the ServiceNow database and returns an array of JavaScript objects representing the records. The objects in the array have properties and values corresponding to the fields and values of the records.
-
-This method is terminal, meaning it executes the GlideQuery, fetches the records, and transforms them into an array of JavaScript objects. After calling `toArray()`, you cannot add more operations to the GlideQuery.
-
-Here's a simple example:
+Here's a simplified example:
 
 ```javascript
 var users = new GlideQuery('sys_user')
-	.select('name', 'email')
-	.limit(10)
-	.toArray();
+    .select('name', 'email')
+    .where('active', true)
+    .limit(10)
+    .toArray();
 
-users.forEach(function (user) {
-	gs.info(user.name + ': ' + user.email);
+// Now users is an array of objects, and we can manipulate it with standard array methods
+users.forEach(function(user) {
+    console.log(user.name + ': ' + user.email);
 });
 ```
 
-In this example, `users` is an array of objects. Each object represents a user record and has `name` and `email` properties. The `forEach` loop is used to print the name and email of each user.
+In this example, `users` is an array of objects where each object has a `name` and `email` property. We can then easily loop through the array and do something with each user.
 
-Behind the scenes, GlideQuery converts each GlideRecord it fetches into a JavaScript object. The returned JavaScript objects are plain data objects, they do not have the methods a GlideRecord has. If you need to call GlideRecord methods on the records, you should use `forEach()`, `map()`, or `reduce()` instead.
+It's important to remember that the `toArray()` method executes the query, so any modifications to the GlideQuery after calling `toArray()` won't affect the result set. 
 
-It's important to note that, by default, GlideQuery only fetches the values of the fields you specify with `select()`. If you call `toArray()` without calling `select()` first, the returned objects will only have `sys_id` field.
+**Question**: How can I use regex with GlideQuery? 
 
-Also, remember to use `limit()` method when using `toArray()`, to avoid fetching a large number of records and potentially running out of memory.
+**Answer**: In ServiceNow, regular expressions can be used with GlideQuery in a number of ways to perform pattern matching and find specific sequences in strings. 
 
-**Question**: How can I use regex with GlideQuery?
-
-**Answer**: GlideQuery does not natively support regular expressions. The usual way to search for a pattern within a string field in ServiceNow is to use the `LIKE` operator or the `MATCHES` operator within an encoded query string.
-
-However, you can use the `addEncodedQuery` method of the GlideRecord object to add a regular expression to your GlideQuery. Here is an example:
+To use regular expressions with GlideQuery, you can utilize the `addQuery` method with the `REGEX` operator. Here's a simple example:
 
 ```javascript
 var gr = new GlideRecord('incident');
-gr.addEncodedQuery('short_descriptionLIKE^abc'); // This will search for the string 'abc' within the short_description field
+gr.addQuery('short_description', 'REGEX', '[0-9]{3}');
 gr.query();
 while (gr.next()) {
-	// perform operations
+    // your code here
 }
 ```
 
-In the above example, `LIKE` operator is used to perform a case-insensitive search for a string within a column.
+In this example, the GlideQuery is looking for all incidents where the 'short_description' field contains a sequence of three digits (represented by the regular expression `[0-9]{3}`). The `{3}` quantifier means exactly three occurrences of the preceding expression, which in this case is `[0-9]` representing any digit from 0 to 9.
 
-Please note that using regular expressions in database queries can have performance implications, especially on large tables. Always ensure your regular expressions and queries are optimized and perform well.
+Another example would be searching for any records that do not match a specific pattern. You can do this by using `NOT REGEX`:
 
-If you need more advanced regular expression functionality, you might need to fetch the data first and then use JavaScript's built-in regular expression functionality to further process the data.
+```javascript
+var gr = new GlideRecord('incident');
+gr.addQuery('short_description', 'NOT REGEX', '[0-9]{3}');
+gr.query();
+while (gr.next()) {
+    // your code here
+}
+```
+
+In this example, the GlideQuery is looking for all incidents where the 'short_description' field does not contain a sequence of three digits.
+
+Please note that using `REGEX` in a query can be resource-intensive and may degrade system performance, so use it wisely and only when necessary. 
+
+**Question**: What happens when you pass nothing to toArray()? 
+
+**Answer**: The `toArray()` method in GlideQuery without passing any arguments will return all the records from the table in the form of an array of objects. Each object in the array represents a single record from the table, and the properties of the object are the fields of the record.
+
+Here is an example of how you use the `toArray()` method:
+
+```javascript
+var users = new GlideQuery('sys_user')
+    .select('user_name', 'first_name', 'last_name')
+    .where('active', true)
+    .toArray();
+
+// users is now an array of objects, each representing an active user.
+// Each object has properties user_name, first_name, and last_name.
+```
+
+In this example, the `toArray()` method returns an array of objects, each representing an active user. Each object has properties `user_name`, `first_name`, and `last_name` which are the fields selected by the `select()` method.
+
+Please note that if no specific fields are selected using the `select()` method, by default, `toArray()` method will return all fields of the record. 
+
+Also, remember that GlideQuery returns data asynchronously, so you need to handle the Promise returned by `toArray()` appropriately in your code. 
+
